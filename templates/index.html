@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Echoes of Fate</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Echoes <span>of</span> Fate</div>
+    <div id="ai-badge" class="badge">checking narrator…</div>
+  </header>
+
+  <main>
+    <!-- ============ SETUP SCREEN ============ -->
+    <section id="setup" class="screen active">
+      <div class="hero-intro">
+        <h1>Every choice rewrites the story.</h1>
+        <p>An adventure written live by Generative AI. Create a hero, pick a world, and make decisions;
+           the AI narrator writes each scene as you go, and the dice decide whether you succeed.</p>
+      </div>
+
+      <form id="setup-form" class="card" novalidate>
+        <label class="field">
+          <span>Hero name</span>
+          <input id="hero" name="hero" maxlength="24" placeholder="e.g. Radhika" autocomplete="off">
+        </label>
+
+        <div class="field">
+          <span>Archetype</span>
+          <div class="pills" id="archetypes">
+            {% for a in archetypes %}
+            <label class="pill"><input type="radio" name="archetype" value="{{ a }}" {% if loop.first %}checked{% endif %}><span>{{ a }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="field">
+          <span>World</span>
+          <div class="worlds">
+            {% for key, desc in settings.items() %}
+            <label class="world world-{{ key }}">
+              <input type="radio" name="setting" value="{{ key }}" {% if loop.first %}checked{% endif %}>
+              <div><strong>{{ desc.split(' - ')[0] }}</strong><small>{{ desc.split(' - ')[1] }}</small></div>
+            </label>
+            {% endfor %}
+            <label class="world world-custom">
+              <input type="radio" name="setting" value="custom">
+              <div><strong>Your own</strong><small>Describe any world you like</small></div>
+            </label>
+          </div>
+          <input id="custom-setting" class="hidden" maxlength="150"
+                 placeholder="e.g. A floating tea-market city in monsoon-era Bengaluru, run by sky pirates">
+        </div>
+
+        <p id="setup-error" class="error" role="alert"></p>
+        <button type="submit" class="btn primary" id="start-btn">Begin the adventure</button>
+      </form>
+    </section>
+
+    <!-- ============ GAME SCREEN ============ -->
+    <section id="play" class="screen">
+      <aside class="sidebar card">
+        <h2 id="story-title">—</h2>
+        <p class="quest"><span>Quest</span><em id="quest"></em></p>
+
+        <div class="stat">
+          <div class="stat-label"><span>Health</span><b id="health-val">100</b></div>
+          <div class="bar"><div id="health-bar" class="fill health"></div></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label"><span>Quest progress</span><b id="progress-val">0</b></div>
+          <div class="bar"><div id="progress-bar" class="fill progress"></div></div>
+        </div>
+        <div class="stat-label"><span>Turn</span><b id="turn-val">0 / 10</b></div>
+
+        <div class="inventory">
+          <span class="stat-label">Inventory</span>
+          <ul id="inventory"></ul>
+        </div>
+
+        <details class="bts">
+          <summary>Behind the scenes (AI)</summary>
+          <div id="bts-body"><p class="muted">No AI calls yet.</p></div>
+        </details>
+      </aside>
+
+      <div class="story-col">
+        <div id="story" class="story"></div>
+
+        <div id="notice" class="notice hidden" role="status"></div>
+
+        <div id="controls" class="card controls">
+          <div id="choices" class="choices"></div>
+          <form id="custom-form" class="custom" novalidate>
+            <input id="custom-action" maxlength="160" autocomplete="off"
+                   placeholder="…or type your own action (e.g. 'bribe the guard with my old map')">
+            <button class="btn" type="submit">Act</button>
+          </form>
+          <p id="play-error" class="error" role="alert"></p>
+        </div>
+
+        <div id="thinking" class="thinking hidden">
+          <div class="d20" id="d20">20</div>
+          <span id="thinking-text">The narrator is writing your fate…</span>
+        </div>
+
+        <div id="ending" class="card ending hidden">
+          <div class="ending-tag" id="ending-tag"></div>
+          <h2 id="ending-title"></h2>
+          <p id="ending-text"></p>
+          <p class="legacy" id="ending-legacy"></p>
+          <div class="ending-actions">
+            <a id="transcript-link" class="btn" href="#">Download story</a>
+            <button id="restart" class="btn primary">New adventure</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='game.js') }}"></script>
+</body>
+</html>
