@@ -34,7 +34,7 @@ log = logging.getLogger("ai_engine")
 PRESETS = {
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "model": "gemini-2.5-flash",
+        "model": "gemini-3.5-flash",
         "needs_key": True,
     },
     "groq": {
