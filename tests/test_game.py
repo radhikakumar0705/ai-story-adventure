@@ -9,7 +9,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ["AI_PROVIDER"] = "offline"
 
-from ai_engine import AIError, StoryAI, extract_json, validate_scene  # noqa: E402
+from ai_engine import AIError, StoryAI, _ModelUnavailable, extract_json, validate_scene  # noqa: E402
 from game import Game, InvalidInput, clean_action, clean_name, resolve_roll  # noqa: E402
 
 
@@ -29,7 +29,8 @@ class FakeAI(StoryAI):
         super().__init__(provider="openai", api_key="x", model="fake")
         self.replies = list(replies)
 
-    def _post(self, messages, temperature, json_mode):
+    def _post(self, messages, temperature, json_mode, model):
+        self.models_called = getattr(self, "models_called", []) + [model]
         r = self.replies.pop(0)
         if isinstance(r, Exception):
             raise r
@@ -102,6 +103,15 @@ def test_api_failure_falls_back_to_offline_narrator():
     g.act(choice_index=1)
     assert g.ai_calls[-1]["source"] == "offline"
     assert g.notices and "backup narrator" in g.notices[0]
+
+
+def test_overloaded_model_switches_to_fallback():
+    ai = FakeAI([_ModelUnavailable("model 'fake' is overloaded right now (HTTP 503)"),
+                 json.dumps(scene_json())])
+    ai.fallback_models = ["backup"]
+    res = ai.chat_json("sys", "user", validate_scene)
+    assert ai.models_called == ["fake", "backup"]
+    assert res.source == "ai" and res.model == "backup"
 
 
 def test_invalid_choice_rejected():

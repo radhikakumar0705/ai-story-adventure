@@ -35,7 +35,7 @@ A playable text-adventure game where a **Generative AI narrator writes the story
 | Generative AI | Any **OpenAI-compatible Chat Completions API**, with presets for **Google Gemini** (default, free tier), **Groq** (Llama 3.3, free tier), **OpenAI**, and **Ollama** (local models, no key) |
 | HTTP client | `requests` |
 | Config | `python-dotenv` (`.env` file) |
-| Testing | `pytest` (10 tests, including a full playthrough and AI-failure scenarios) |
+| Testing | `pytest` (11 tests, including a full playthrough and AI-failure scenarios) |
 
 ---
 
@@ -67,7 +67,7 @@ python app.py
 | Ollama (local) | `AI_PROVIDER=ollama` | Install Ollama, run `ollama pull llama3.1`. No key needed. |
 | Offline | `AI_PROVIDER=offline` | Template-based backup narrator, no AI |
 
-Override the model with `AI_MODEL=...` if a default model has been renamed or retired by the provider. Any other OpenAI-compatible service works by setting `AI_BASE_URL` and `AI_MODEL`.
+If the main model is overloaded, the game automatically tries backup models (`gemini-flash-lite-latest`, then `gemini-3.1-flash-lite`); change them with `AI_FALLBACK_MODELS=...`. Override the model with `AI_MODEL=...` if a default model has been renamed or retired by the provider. Any other OpenAI-compatible service works by setting `AI_BASE_URL` and `AI_MODEL`.
 
 The badge in the top-right corner of the game shows which narrator is active: green means the AI is live; amber means the offline backup narrator is in use.
 
@@ -110,6 +110,7 @@ The AI generates content at **runtime** in three places. Nothing is pre-written.
 | Prompt injection in a custom world description | Rejected at setup |
 | **AI returns malformed JSON** or misses fields | Parser strips code fences and stray text and fixes trailing commas; if the reply is still invalid, the AI is **re-asked** with the specific error (up to 2 retries) |
 | **AI timeout, network error, rate limit (429), server error** | Automatic retries with back-off |
+| **Model overloaded (503), rate-limited, timed out or retired** | Switches to a backup Gemini model (`AI_FALLBACK_MODELS`) before giving up |
 | **AI keeps failing, or the API key is invalid** | The **offline backup narrator** generates that scene so the game never crashes, and an in-game notice tells the player |
 | No API key configured | The game starts in offline mode, and a warning is printed in the terminal |
 | AI output is shown in the page | Always inserted as plain text (`textContent`), never as HTML |

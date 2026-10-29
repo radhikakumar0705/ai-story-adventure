@@ -35,6 +35,8 @@ PRESETS = {
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "model": "gemini-3.5-flash",
+        # tried in order when the main model is overloaded (503/429) or times out
+        "fallback_models": ["gemini-flash-lite-latest", "gemini-3.1-flash-lite"],
         "needs_key": True,
     },
     "groq": {
@@ -59,6 +61,10 @@ class AIError(Exception):
     """Raised when the AI provider fails or returns unusable output."""
 
 
+class _ModelUnavailable(AIError):
+    """This model is busy, missing or too slow right now - try the next fallback model."""
+
+
 @dataclass
 class AIResult:
     data: dict
@@ -81,6 +87,10 @@ class StoryAI:
         preset = PRESETS.get(self.provider, {})
         self.api_key = api_key if api_key is not None else os.getenv("AI_API_KEY", "").strip()
         self.model = model or os.getenv("AI_MODEL", "").strip() or preset.get("model", "")
+        env_fallbacks = os.getenv("AI_FALLBACK_MODELS")
+        fallbacks = ([m.strip() for m in env_fallbacks.split(",")] if env_fallbacks is not None
+                     else preset.get("fallback_models", []))
+        self.fallback_models = [m for m in fallbacks if m and m != self.model]
         self.base_url = (base_url or os.getenv("AI_BASE_URL", "").strip()
                          or preset.get("base_url", "")).rstrip("/")
         self.timeout = float(timeout or os.getenv("AI_TIMEOUT", "40"))
@@ -106,7 +116,8 @@ class StoryAI:
         }
 
     def chat_json(self, system: str, user: str, validator, temperature: float = 0.9) -> AIResult:
-        """Call the model, parse JSON, validate. Retries on network/format errors."""
+        """Call the model, parse JSON, validate. Retries on network/format errors,
+        and moves on to the next fallback model if one is overloaded or missing."""
         if not self.enabled:
             raise AIError(f"AI disabled: {self.disabled_reason}")
 
@@ -115,14 +126,28 @@ class StoryAI:
         last_err: Exception | None = None
         use_json_mode = True
         start = time.time()
+        models = [self.model] + self.fallback_models
+        model_idx = 0
 
-        for attempt in range(1, self.max_retries + 2):
+        attempt = 0
+        while attempt <= self.max_retries:
+            attempt += 1
+            model = models[model_idx]
             try:
-                raw = self._post(messages, temperature, use_json_mode)
+                raw = self._post(messages, temperature, use_json_mode, model)
                 data = validator(extract_json(raw))
-                return AIResult(data=data, source="ai", model=self.model,
+                return AIResult(data=data, source="ai", model=model,
                                 latency_ms=int((time.time() - start) * 1000),
                                 raw=raw, attempts=attempt)
+            except _ModelUnavailable as e:
+                last_err = e
+                if model_idx + 1 < len(models):
+                    model_idx += 1
+                    log.warning("%s - switching to fallback model %s", e, models[model_idx])
+                    attempt -= 1               # a busy model doesn't use up a retry
+                    continue
+                if getattr(e, "fatal", False):
+                    break
             except _JsonModeUnsupported:
                 use_json_mode = False          # some models reject response_format
                 last_err = AIError("provider rejected JSON mode; retrying without it")
@@ -143,12 +168,12 @@ class StoryAI:
         raise last_err or AIError("unknown AI failure")
 
     # -- internals -----------------------------------------------------------
-    def _post(self, messages, temperature, json_mode) -> str:
+    def _post(self, messages, temperature, json_mode, model) -> str:
         url = f"{self.base_url}/chat/completions"
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        body = {"model": self.model, "messages": messages,
+        body = {"model": model, "messages": messages,
                 "temperature": temperature, "max_tokens": 4096}
         if json_mode:
             body["response_format"] = {"type": "json_object"}
@@ -156,7 +181,7 @@ class StoryAI:
         try:
             r = requests.post(url, headers=headers, json=body, timeout=self.timeout)
         except requests.Timeout:
-            raise AIError(f"AI request timed out after {self.timeout:.0f}s")
+            raise _ModelUnavailable(f"AI request timed out after {self.timeout:.0f}s")
         except requests.RequestException as e:
             raise AIError(f"could not reach AI provider ({e.__class__.__name__})")
 
@@ -167,11 +192,13 @@ class StoryAI:
             err.fatal = True
             raise err
         if r.status_code == 404:
-            err = AIError(f"model '{self.model}' not found at provider (HTTP 404)")
+            err = _ModelUnavailable(f"model '{model}' not found at provider (HTTP 404)")
             err.fatal = True
             raise err
         if r.status_code == 429:
-            raise AIError("AI rate limit reached (HTTP 429)")
+            raise _ModelUnavailable(f"AI rate limit reached for '{model}' (HTTP 429)")
+        if r.status_code == 503:
+            raise _ModelUnavailable(f"model '{model}' is overloaded right now (HTTP 503)")
         if r.status_code >= 400:
             raise AIError(f"AI provider error HTTP {r.status_code}: {r.text[:160]}")
 

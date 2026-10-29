@@ -29,7 +29,7 @@
 3. Open http://127.0.0.1:5000. The top-right badge should be **green** ("AI narrator: gemini …").
    - If it is amber or shows a "model not found" notice, set `AI_MODEL=` in `.env` to a current Gemini model name (or switch to `AI_PROVIDER=groq` with a Groq key).
 4. Play one full game once so you know it works, and keep that tab open as a backup.
-5. Optional: `python -m pytest -q` should show 10 passed.
+5. Optional: `python -m pytest -q` should show 11 passed.
 
 ## Demo script (about 3 minutes)
 1. **Intro (15 s):** "An adventure where a Generative AI narrator writes the story live from my decisions, and a dice roll decides if I succeed."
@@ -45,5 +45,5 @@
 - *Why JSON output?* So the game can reliably read choices and effects and validate them, instead of parsing free text.
 - *How do you stop the AI breaking the game?* The AI only proposes effects; `game.py` clamps them to ranges set by the dice outcome, caps inventory, and controls endings.
 - *How does it remember the story?* A one-line summary of each turn plus the previous full scene goes into every prompt.
-- *What if the API fails?* Retries, then the offline backup narrator; the player is notified.
+- *What if the API fails?* Retries; if the model is overloaded (HTTP 503) it switches to a backup Gemini model; if everything fails, the offline backup narrator takes over and the player is notified.
 - *Why the dice?* They make it a game rather than just a story: risk versus reward, and the AI can't always be kind.
